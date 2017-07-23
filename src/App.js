@@ -2,18 +2,23 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import './App.css';
 // import {Responsive, WidthProvider} from 'react-grid-layout';
-import ReactGridLayout from 'react-grid-layout';
-import { RIEInput } from 'riek';
+import ReactGridLayout, { WidthProvider } from 'react-grid-layout';
+import { RIEInput, RIETags } from 'riek';
 
+const AutoReactGridLayout = WidthProvider(ReactGridLayout);
 let APP_NAME = 'cuer-convoy';
 let VEHICLE_COUNT = 6;
 let GRID_COUNTER = 0;
+let LS = false;
+let HASH = true;
 
 
 class App extends Component {
-
     constructor(props) {
         super(props);
+        this.getDefaultState = this.getDefaultState.bind(this);
+        this.getInitialState = this.getInitialState.bind(this);
+        this.getSavedState = this.getSavedState.bind(this);
         this.saveState = this.saveState.bind(this);
         this.loadState = this.loadState.bind(this);
         this.handleAddItem = this.handleAddItem.bind(this);
@@ -38,10 +43,31 @@ class App extends Component {
     // static_items_text: text on immutable items in the grid
     // items: mutable items in the grid
     // {id, x, y, text, static}
-    getInitialState() {
+    getDefaultState() {
         return {
             static_items_text: this.defaultStaticText(),
             items: [],
+        };
+    }
+
+    getInitialState() {
+        return this.getSavedState();
+    }
+
+    getSavedState() {
+        let json_str = (
+            (HASH && getFromHash()) ||
+            (LS && getFromLS()) ||
+            '{}'
+        );
+        let save_obj = JSON.parse(json_str);
+        let _items = [];
+        if (save_obj.i !== undefined) {
+            _items = save_obj.i.map(str_to_inf);
+        }
+        return {
+            static_items_text: save_obj.s || this.defaultStaticText(),
+            items: _items,
         };
     }
 
@@ -53,18 +79,12 @@ class App extends Component {
             save_obj.s = this.state.static_items_text;
         }
         let json_str = JSON.stringify(save_obj);
-        setToHash(json_str);
-        saveToLS(json_str);
+        if (HASH) setToHash(json_str);
+        if (LS) saveToLS(json_str);
     }
 
     loadState() {
-        let json_str = (getFromHash() || getFromLS() || '');
-        let save_obj = JSON.parse(json_str);
-        // console.log("setState - loadState")
-        this.setState({
-            static_items_text: save_obj.s || this.defaultStaticText(),
-            items: save_obj.i.map(str_to_inf),
-        });
+        this.setState(this.getSavedState);
     }
 
     toStaticItem(text, i) {
@@ -99,14 +119,35 @@ class App extends Component {
     }
 
     getElements() {
-        let createElement = (function(item) {
-            let removeStyle = (item.static === true) ? {border: '0px'} : {};
-            let removeButtonStyle = {
-                position: 'absolute',
-                right: '2px',
-                top: 0,
-                cursor: 'pointer'
-            };
+        let createHeaderElement = (function(item, idx) {
+            let handleTextChange = (function(key, keyval) {
+                this.setState({
+                    static_items_text: this.state.static_items_text.map(
+                        (function(text_item, i) {
+                            if (i === idx) {
+                                return keyval[key];
+                            }
+                            return text_item;
+                        })
+                    ),
+                });
+                this.saveState();
+            });
+            return (
+                <div key={ item.id }>
+                    <VehicleItem
+                        item={ item }
+                        onClickRemove={
+                            this.handleRemoveItem.bind(this, item.id)
+                        }
+                        onChangeText={
+                            handleTextChange.bind(this, item.id)
+                        }
+                    />
+                </div>
+            );
+        }).bind(this);
+        let createItemElement = (function(item) {
             let handleTextChange = (function(key, keyval) {
                 this.setState({
                     items: this.state.items.map(
@@ -118,44 +159,42 @@ class App extends Component {
                         })
                     ),
                 });
-            });
+                this.saveState();
+            })
             return (
-                <div key={ item.id } style={ removeStyle }>
-                    <div>
-                        <RIEInput className="text"
-                            value={ item.text }
-                            change={ handleTextChange.bind(this, item.id) }
-                            propName={ item.id } />
-                    </div>
-                    {
-                        (item.static === true) ?
-                        (null) :
-                        (<span className="remove"
-                            style={removeButtonStyle}
-                            onClick={ this.handleRemoveItem.bind(this, item.id) }>
-                                x
-                        </span>)
-                    }
+                <div key={ item.id }>
+                    <PersonItem
+                        item={ item }
+                        onClickRemove={
+                            this.handleRemoveItem.bind(this, item.id)
+                        }
+                        onChangeText={
+                            handleTextChange.bind(this, item.id)
+                        }
+                    />
                 </div>
             );
         }).bind(this);
-        let itemElement = (function(item) {
+        let toItemElement = (function(item) {
             return {
                 id: item.id,
                 text: item.text,
                 static: item.static || false,
             };
         });
-        let static_items = this.state.static_items_text.map(this.toStaticItem);
-        let elements = (
-            static_items.concat(this.state.items).map(itemElement)
-        ).map(createElement);
+        console.log(this);
+        let static_items = this.state.static_items_text
+            .map(this.toStaticItem)
+            .map(toItemElement)
+            .map(createHeaderElement);
+        let main_items = this.state.items
+            .map(toItemElement)
+            .map(createItemElement);
+        let elements = static_items.concat(main_items);
         return elements;
     }
 
     handleLayoutChange(layout) {
-        // console.log("setState - handleLayoutChange");
-        // console.log(layout);
         this.setState({
             items: layout.slice(VEHICLE_COUNT+1).map(
                 // extract useful information from layout
@@ -173,7 +212,6 @@ class App extends Component {
     }
 
     handleAddItem(val="") {
-        // console.log("setState - handleAddItem");
         this.setState({
             // add a new item
             items: this.state.items.concat({
@@ -186,7 +224,6 @@ class App extends Component {
     }
 
     handleRemoveItem(key) {
-        // console.log("setState - handleRemoveItem");
         this.setState({
             items: Array.prototype.filter.call(
                 this.state.items, item => item.id!==key
@@ -195,29 +232,39 @@ class App extends Component {
     }
 
     handleClear() {
-        // console.log("setState - handleClear");
-        this.setState(this.getInitialState());
+        this.setState(this.getDefaultState());
         window.location.hash = "";
     }
 
     render() {
-        // console.log('render');
-        // console.log(this.state);
         let layout = this.getLayout();
         let elements = this.getElements();
         return (
             <div className="App">
+                <RIETags
+                    value={ new Set([
+                        "Bergen",
+                        "Asmara",
+                        "Göteborg",
+                        "Newcastle",
+                        "Seattle"
+                    ]) }
+                    change={ function(){} }
+                    propName='title'
+                    className='tags'
+                />
                 <Input
                     onAdd={ this.handleAddItem }
-                    onClear={ this.handleClear } />
-                <ReactGridLayout
+                    onClear={ this.handleClear }
+                />
+                <AutoReactGridLayout
                     cols={ VEHICLE_COUNT+1 }
-                    rowHeight={ 40 }
+                    rowHeight={ 60 }
                     width={ 1600 }
                     layout={ layout }
                     onLayoutChange={ this.handleLayoutChange.bind(this) }>
                         { elements }
-                </ReactGridLayout>
+                </AutoReactGridLayout>
             </div>
         );
     }
@@ -225,7 +272,6 @@ class App extends Component {
 
 
 class Input extends React.Component {
-
     _handleKeyPress = (e) => {
         if (e.key === 'Enter') {
             this.props.onAdd(e.target.value);
@@ -241,8 +287,13 @@ class Input extends React.Component {
     render() {
         return (
             <div>
-                <input ref='name' type="text" onKeyPress={this._handleKeyPress}/>
-                <button onClick={ this._handleButtonPress }>Add Person (Enter)</button>
+                <input
+                    ref='name'
+                    type="text"
+                    onKeyPress={this._handleKeyPress}/>
+                <button onClick={ this._handleButtonPress }>
+                    Add Person (Enter)
+                </button>
                 <button onClick={ this.props.onClear }>Clear</button>
             </div>
         )
@@ -251,6 +302,94 @@ class Input extends React.Component {
 Input.propTypes = {
     onAdd: PropTypes.func.isRequired,
     onClear: PropTypes.func.isRequired,
+};
+
+
+class VehicleItem extends React.Component {
+    render() {
+        let removeStyle = (
+            this.props.item.static === true
+        ) ? {border: '0px'} : {};
+        let removeButtonStyle = {
+            position: 'absolute',
+            right: '2px',
+            top: 0,
+            cursor: 'pointer'
+        };
+        return (
+            <div style={ removeStyle }>
+                <div>
+                    <RIEInput className="text"
+                        value={ this.props.item.text }
+                        change={ this.props.onChangeText }
+                        propName={ this.props.item.id }
+                    />
+                </div>
+                {
+                    (this.props.item.static === true) ?
+                    (null) :
+                    (<span className="remove"
+                        style={removeButtonStyle}
+                        onClick={ this.props.onClickRemove }>
+                            x
+                    </span>)
+                }
+            </div>
+        );
+    }
+}
+VehicleItem.propTypes = {
+    // item requires id, static, and text
+    item: PropTypes.object.isRequired,
+    onClickRemove: PropTypes.func.isRequired,
+    onChangeText: PropTypes.func.isRequired,
+};
+
+
+class PersonItem extends React.Component {
+    render() {
+        let removeStyle = (
+            this.props.item.static === true
+        ) ? {border: '0px'} : {};
+        let removeButtonStyle = {
+            position: 'absolute',
+            right: '2px',
+            top: 0,
+            cursor: 'pointer'
+        };
+        return (
+            <div style={ removeStyle }>
+                <div>
+                    <RIEInput className="text"
+                        value={ this.props.item.text }
+                        change={ this.props.onChangeText }
+                        propName={ this.props.item.id }
+                    />
+                </div>
+                <RIETags
+                    value={ new Set(['demo']) }
+                    change={ function(){} }
+                    propName='title'
+                    className='tags'
+                />
+                {
+                    (this.props.item.static === true) ?
+                    (null) :
+                    (<span className="remove"
+                        style={removeButtonStyle}
+                        onClick={ this.props.onClickRemove }>
+                            x
+                    </span>)
+                }
+            </div>
+        );
+    }
+}
+PersonItem.propTypes = {
+    // item requires id, static, and text
+    item: PropTypes.object.isRequired,
+    onClickRemove: PropTypes.func.isRequired,
+    onChangeText: PropTypes.func.isRequired,
 };
 
 function inf_to_str(item) {

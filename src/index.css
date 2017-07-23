@@ -1,23 +1,33 @@
 body {
-  margin: 0;
-  padding: 0;
-  font-family: sans-serif;
-  background-color: #272823;
-  color: #EEE;
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
+    background-color: #272823;
+    color: white;
 }
 
-/*input,textarea {
-    border: none;
-    border-color: transparent;
-}*/
+input, textarea, button {
+    background-color: grey;
+    color: white;
+    border: 3px solid transparent;
+    padding: 8px;
+    margin: 4px;
+}
+input[type=text]:focus {
+    background-color: rgb(124, 182, 244, 0.8);
+}
+input[type=text]:focus {
+    border: 3px solid #555;
+}
+
 
 .react-grid-layout {
-  position: relative;
-  transition: height 200ms ease;
+    position: relative;
+    transition: height 200ms ease;
 }
 .react-grid-item {
-  transition: all 200ms ease;
-  transition-property: left, top;
+    transition: all 200ms ease;
+    transition-property: left, top;
 }
 .react-grid-item:not(.react-grid-placeholder) {
     background: #666;
@@ -27,42 +37,79 @@ body {
     padding: 10px;
 }
 .react-grid-item.cssTransforms {
-  transition-property: transform;
+    transition-property: transform;
 }
 .react-grid-item.resizing {
-  z-index: 1;
-  will-change: width, height;
+    z-index: 1;
+    will-change: width, height;
 }
 
 .react-grid-item.react-draggable-dragging {
-  transition: none;
-  z-index: 3;
-  will-change: transform;
+    transition: none;
+    z-index: 3;
+    will-change: transform;
 }
 
 .react-grid-item.react-grid-placeholder {
-  background: red;
-  opacity: 0.2;
-  transition-duration: 100ms;
-  z-index: 2;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  -o-user-select: none;
-  user-select: none;
+    background: red;
+    opacity: 0.2;
+    transition-duration: 100ms;
+    z-index: 2;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    -o-user-select: none;
+    user-select: none;
 }
 
 .react-grid-item > .react-resizable-handle {
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  bottom: 0;
-  right: 0;
-  background: url('data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNiA2IiBzdHlsZT0iYmFja2dyb3VuZC1jb2xvcjojMDAwMDAwMDAiIHZlcnNpb249IjEuMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSIgeD0iMHB4IiB5PSIwcHgiIHdpZHRoPSI2cHgiIGhlaWdodD0iNnB4Ij4NCiAgPGcgb3BhY2l0eT0iMC4zMDIiPg0KICAgIDxwYXRoIGQ9Ik0gNiA2IEwgMCA2IEwgMCA0LjIgTCA0IDQuMiBMIDQuMiA0LjIgTCA0LjIgMCBMIDYgMCBMIDYgNiBMIDYgNiBaIiBmaWxsPSIjZmZmZmZmIi8+DQogIDwvZz4NCjwvc3ZnPg==');
-  background-position: bottom right;
-  padding: 0 3px 3px 0;
-  background-repeat: no-repeat;
-  background-origin: content-box;
-  box-sizing: border-box;
-  cursor: se-resize;
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    bottom: 0;
+    right: 0;
+    background: url('data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNiA2IiBzdHlsZT0iYmFja2dyb3VuZC1jb2xvcjojMDAwMDAwMDAiIHZlcnNpb249IjEuMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSIgeD0iMHB4IiB5PSIwcHgiIHdpZHRoPSI2cHgiIGhlaWdodD0iNnB4Ij4NCiAgPGcgb3BhY2l0eT0iMC4zMDIiPg0KICAgIDxwYXRoIGQ9Ik0gNiA2IEwgMCA2IEwgMCA0LjIgTCA0IDQuMiBMIDQuMiA0LjIgTCA0LjIgMCBMIDYgMCBMIDYgNiBMIDYgNiBaIiBmaWxsPSIjZmZmZmZmIi8+DQogIDwvZz4NCjwvc3ZnPg==');
+    background-position: bottom right;
+    padding: 0 3px 3px 0;
+    background-repeat: no-repeat;
+    background-origin: content-box;
+    box-sizing: border-box;
+    cursor: se-resize;
+}
+
+.tags {
+    border-radius: 5px;
+    border: 1px solid grey;
+}
+
+span.tags {
+    padding: 1px 5px;
+}
+
+.tags > div {
+    background-color: black;
+    color: white;
+    padding: 1px 5px;
+    /*padding-left: 5px;*/
+    margin: 0 3px;
+    border-radius: 5px;
+}
+
+.tags, .tags div {
+    display: inline-block;
+}
+
+.tags.loading > div {
+    background-color: transparent;
+    color: white;
+}
+
+.tags > div > div {
+    padding: 0 0 0 0;
+    margin: 0 4px;
+}
+
+.tags input {
+    padding: 4px;
+    margin: 2px;
 }
