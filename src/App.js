@@ -6,28 +6,20 @@ import ReactGridLayout, { WidthProvider } from 'react-grid-layout';
 import { RIEInput, RIETags } from 'riek';
 
 const AutoReactGridLayout = WidthProvider(ReactGridLayout);
-let APP_NAME = 'cuer-convoy';
-let VEHICLE_COUNT = 6;
-let GRID_COUNTER = 0;
-let LS = false;
-let HASH = true;
+
+const APP_NAME = 'cuer-convoy';
+const VEHICLE_COUNT = 6;
+const LS = false;
+const HASH = true;
 
 
 class App extends Component {
     constructor(props) {
         super(props);
-        this.getDefaultState = this.getDefaultState.bind(this);
-        this.getInitialState = this.getInitialState.bind(this);
-        this.getSavedState = this.getSavedState.bind(this);
-        this.saveState = this.saveState.bind(this);
-        this.loadState = this.loadState.bind(this);
-        this.handleAddItem = this.handleAddItem.bind(this);
-        this.handleRemoveItem = this.handleRemoveItem.bind(this);
-        this.handleClear = this.handleClear.bind(this);
         this.state = this.getInitialState();
     }
 
-    defaultStaticText() {
+    defaultVehicleNames() {
         return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].slice(
             0, VEHICLE_COUNT+1
         ).map(function(i) {
@@ -39,14 +31,27 @@ class App extends Component {
         })
     }
 
-    // State:
-    // static_items_text: text on immutable items in the grid
-    // items: mutable items in the grid
-    // {id, x, y, text, static}
+    getVehicleId(vehicle_name, vehicle_idx) {
+        return vehicle_idx.toString() + vehicle_name.toString();
+    }
+
+    getPersonId(vehicle_name, vehicle_idx, person_name, person_idx) {
+        return vehicle_idx.toString() + vehicle_name.toString() +
+        '-' +
+        person_idx.toString() + person_name.toString();
+    }
+
     getDefaultState() {
+        let vehicle_data = this.defaultVehicleNames().map(
+            function(vehicle_name) {
+                return {
+                    name: vehicle_name,
+                    people: []
+                }
+            }
+        );
         return {
-            static_items_text: this.defaultStaticText(),
-            items: [],
+            vehicles: vehicle_data,
         };
     }
 
@@ -58,48 +63,179 @@ class App extends Component {
         let json_str = (
             (HASH && getFromHash()) ||
             (LS && getFromLS()) ||
-            '{}'
+            '[]'
         );
         let save_obj = JSON.parse(json_str);
-        let _items = [];
-        if (save_obj.i !== undefined) {
-            _items = save_obj.i.map(str_to_inf);
+        if (save_obj.length===0) {
+            return this.getDefaultState();
         }
+        let default_vehicle_names = this.defaultVehicleNames()
+        let new_vehicles = save_obj.map(
+            function(save_vehicle, idx) {
+                return {
+                    name: save_vehicle.n || default_vehicle_names[idx],
+                    people: save_vehicle.p || [],
+                };
+            }
+        )
         return {
-            static_items_text: save_obj.s || this.defaultStaticText(),
-            items: _items,
+            vehicles: new_vehicles,
         };
     }
 
     saveState() {
-        let save_obj = {
-            i: this.state.items.map(inf_to_str),
-        };
-        if (this.state.static_items_text === this.defaultStaticText()) {
-            save_obj.s = this.state.static_items_text;
-        }
+        let save_obj = this.state.vehicles;
+        let default_vehicle_names = this.defaultVehicleNames()
+        save_obj = save_obj.map(
+            function(vehicle, idx) {
+                let save_vehicle = {
+                    p: vehicle.people,
+                };
+                if (vehicle.name !== default_vehicle_names[idx]) {
+                    save_vehicle.n = vehicle.name
+                }
+                return save_vehicle;
+            }
+        );
         let json_str = JSON.stringify(save_obj);
+        if (save_obj.every(
+            vehicle => vehicle.p.length===0&&vehicle.n===undefined
+        )) {
+            json_str = "";
+        }
         if (HASH) setToHash(json_str);
         if (LS) saveToLS(json_str);
     }
 
     loadState() {
-        this.setState(this.getSavedState);
+        this.setState(this.getSavedState());
     }
 
-    toStaticItem(text, i) {
+    toVehicleItem(vehicle, vehicle_idx) {
         return {
-            id: 's'+i.toString(),
-            text: text,
-            x: i, y: 0,
-            w: 1, h: 1,
-            static: true
+            id: this.getVehicleId(vehicle.name, vehicle_idx),
+            name: vehicle.name,
+            x: vehicle_idx, y: 0,
+            static: true,
         };
     }
 
+    toPersonItem(vehicle, vehicle_idx, person, person_idx) {
+        return {
+            id: this.getPersonId(
+                vehicle.name, vehicle_idx,
+                person.name, person_idx
+            ),
+            name: person.name,
+            x: vehicle_idx, y: person_idx,
+            vehicle_idx: vehicle_idx,
+        };
+    }
+
+    getPeopleItems(vehicles) {
+        let push_func = function(
+            acc, vehicle, vehicle_idx,
+            person, person_idx
+        ) {
+            acc.push(this.toPersonItem(
+                vehicle, vehicle_idx,
+                person, person_idx
+            ));
+        };
+        let concat_vehicle_people = function(acc, vehicle, vehicle_idx) {
+            vehicle.people.forEach(
+                push_func.bind(this, acc, vehicle, vehicle_idx)
+            );
+            return acc;
+        };
+        return vehicles.reduce(
+            concat_vehicle_people.bind(this),
+            []
+        );
+    }
+
+    handleRenameVehicle(vehicle_idx, val) {
+        this.setState(prevState => {
+            prevState.vehicles[vehicle_idx].name = val;
+            return {
+                vehicles: prevState.vehicles
+            }
+        });
+        this.saveState();
+    }
+
+    handleAddPerson(val) {
+        this.setState(prevState => {
+            prevState.vehicles[0].people.push({
+                name: val,
+            });
+            return {
+                vehicles: prevState.vehicles
+            }
+        });
+        this.saveState();
+    }
+
+    handleRemovePerson(vehicle_idx, person_idx) {
+        this.setState(prevState => {
+            prevState.vehicles[vehicle_idx].people.splice(person_idx, 1);
+            return {
+                vehicles: prevState.vehicles
+            }
+        });
+        this.saveState();
+    }
+
+    handleEditPerson(vehicle_idx, person_idx, person) {
+        this.setState(prevState => {
+            prevState.vehicles[vehicle_idx].people[person_idx] = person;
+            return {
+                vehicles: prevState.vehicles
+            }
+        });
+        this.saveState();
+    }
+
+    handleClearPeople() {
+        this.setState(this.getDefaultState());
+        if (HASH) setToHash("");
+        if (LS) saveToLS("");
+    }
+
+    handleLayoutChange(layout) {
+        this.setState(prevState => {
+            let all_people = this.getPeopleItems(prevState.vehicles);
+            let new_vehicles = prevState.vehicles.map(
+                function(vehicle, vehicle_idx) {
+                    let new_people = all_people
+                        .filter(person => layout.find(
+                            grid_item => grid_item.i===person.id
+                        ).x===vehicle_idx)
+                        .sort(function(person_a, person_b) {
+                            return (
+                                layout.find(
+                                    grid_item => grid_item.i===person_a.id
+                                ).y -
+                                layout.find(
+                                    grid_item => grid_item.i===person_b.id
+                                ).y
+                            );
+                        });
+                    return {
+                        name: vehicle.name,
+                        people: new_people,
+                    };
+                }
+            );
+            return {
+                vehicles: new_vehicles
+            }
+        });
+        this.saveState();
+    }
+
     getLayout() {
-        // fill layout with missing data
-        let toLayout = (function(item) {
+        let itemToGridItem = (function(item) {
             if (item.id === undefined ||
                 item.x === undefined ||
                 item.y === undefined) {
@@ -113,127 +249,58 @@ class App extends Component {
                 static: item.static || false,
             };
         });
-        let static_items = this.state.static_items_text.map(this.toStaticItem);
-        let layout = static_items.concat(this.state.items).map(toLayout);
+        let vehicle_items = this.state.vehicles
+            .map(this.toVehicleItem.bind(this));
+        let people_items = this.getPeopleItems(this.state.vehicles);
+        let layout = vehicle_items.concat(people_items).map(itemToGridItem);
         return layout;
     }
 
     getElements() {
-        let createHeaderElement = (function(item, idx) {
-            let handleTextChange = (function(key, keyval) {
-                this.setState({
-                    static_items_text: this.state.static_items_text.map(
-                        (function(text_item, i) {
-                            if (i === idx) {
-                                return keyval[key];
-                            }
-                            return text_item;
-                        })
-                    ),
-                });
-                this.saveState();
-            });
-            return (
-                <div key={ item.id }>
-                    <VehicleItem
-                        item={ item }
-                        onClickRemove={
-                            this.handleRemoveItem.bind(this, item.id)
-                        }
-                        onChangeText={
-                            handleTextChange.bind(this, item.id)
-                        }
-                    />
-                </div>
-            );
-        }).bind(this);
-        let createItemElement = (function(item) {
-            let handleTextChange = (function(key, keyval) {
-                this.setState({
-                    items: this.state.items.map(
-                        (function(item) {
-                            if (item.id === key) {
-                                item.text = keyval[key];
-                            }
-                            return item;
-                        })
-                    ),
-                });
-                this.saveState();
-            })
-            return (
-                <div key={ item.id }>
-                    <PersonItem
-                        item={ item }
-                        onClickRemove={
-                            this.handleRemoveItem.bind(this, item.id)
-                        }
-                        onChangeText={
-                            handleTextChange.bind(this, item.id)
-                        }
-                    />
-                </div>
-            );
-        }).bind(this);
-        let toItemElement = (function(item) {
-            return {
-                id: item.id,
-                text: item.text,
-                static: item.static || false,
+        let createVehicleElement = function(vehicle, vehicle_idx) {
+            let handleTextChange = function(val) {
+                this.handleRenameVehicle(vehicle_idx, val)
             };
-        });
-        console.log(this);
-        let static_items = this.state.static_items_text
-            .map(this.toStaticItem)
-            .map(toItemElement)
-            .map(createHeaderElement);
-        let main_items = this.state.items
-            .map(toItemElement)
-            .map(createItemElement);
-        let elements = static_items.concat(main_items);
+            return (
+                <div key={ vehicle.id }>
+                    <VehicleItem
+                        vehicle={ vehicle }
+                        onChangeText={
+                            handleTextChange.bind(this)
+                        }
+                    />
+                </div>
+            );
+        };
+        let createPersonElement = function(person, person_idx) {
+            let handleTextChange = function(val) {
+                this.handleEditPerson(person.vehicle_idx, person_idx, {
+                    name: val,
+                })
+            };
+            return (
+                <div key={ person.id }>
+                    <PersonItem
+                        person={ person }
+                        onClickRemove={
+                            this.handleRemovePerson.bind(
+                                this, person.vehicle_idx, person_idx
+                            )
+                        }
+                        onChangeText={
+                            handleTextChange.bind(this)
+                        }
+                    />
+                </div>
+            );
+        };
+        let vehicle_elements = this.state.vehicles
+            .map(this.toVehicleItem.bind(this))
+            .map(createVehicleElement.bind(this));
+        let people_elements = this.getPeopleItems(this.state.vehicles)
+            .map(createPersonElement.bind(this));
+        let elements = vehicle_elements.concat(people_elements);
         return elements;
-    }
-
-    handleLayoutChange(layout) {
-        this.setState({
-            items: layout.slice(VEHICLE_COUNT+1).map(
-                // extract useful information from layout
-                (function(item, idx) {
-                    return {
-                        id: item.i,
-                        text: this.state.items[idx].text,
-                        x: item.x,
-                        y: item.y,
-                    }
-                }).bind(this)
-            ),
-        });
-        this.saveState();
-    }
-
-    handleAddItem(val="") {
-        this.setState({
-            // add a new item
-            items: this.state.items.concat({
-                id: 'n' + GRID_COUNTER.toString(),
-                text: val,
-                x: 0, y: Infinity, // puts it at the bottom
-            }),
-        });
-        GRID_COUNTER += 1;
-    }
-
-    handleRemoveItem(key) {
-        this.setState({
-            items: Array.prototype.filter.call(
-                this.state.items, item => item.id!==key
-            )
-        });
-    }
-
-    handleClear() {
-        this.setState(this.getDefaultState());
-        window.location.hash = "";
     }
 
     render() {
@@ -241,25 +308,13 @@ class App extends Component {
         let elements = this.getElements();
         return (
             <div className="App">
-                <RIETags
-                    value={ new Set([
-                        "Bergen",
-                        "Asmara",
-                        "Göteborg",
-                        "Newcastle",
-                        "Seattle"
-                    ]) }
-                    change={ function(){} }
-                    propName='title'
-                    className='tags'
-                />
                 <Input
-                    onAdd={ this.handleAddItem }
-                    onClear={ this.handleClear }
+                    onAdd={ this.handleAddPerson.bind(this) }
+                    onClear={ this.handleClearPeople.bind(this) }
                 />
                 <AutoReactGridLayout
                     cols={ VEHICLE_COUNT+1 }
-                    rowHeight={ 60 }
+                    rowHeight={ 100 }
                     width={ 1600 }
                     layout={ layout }
                     onLayoutChange={ this.handleLayoutChange.bind(this) }>
@@ -306,79 +361,58 @@ Input.propTypes = {
 
 
 class VehicleItem extends React.Component {
+    handleChangeName(keyval) {
+        this.props.onChangeText(keyval[this.props.vehicle.id])
+    }
     render() {
-        let removeStyle = (
-            this.props.item.static === true
-        ) ? {border: '0px'} : {};
-        let removeButtonStyle = {
-            position: 'absolute',
-            right: '2px',
-            top: 0,
-            cursor: 'pointer'
-        };
         return (
-            <div style={ removeStyle }>
+            <div>
                 <div>
                     <RIEInput className="text"
-                        value={ this.props.item.text }
-                        change={ this.props.onChangeText }
-                        propName={ this.props.item.id }
+                        value={ this.props.vehicle.name }
+                        change={ this.handleChangeName.bind(this) }
+                        propName={ this.props.vehicle.id }
                     />
                 </div>
-                {
-                    (this.props.item.static === true) ?
-                    (null) :
-                    (<span className="remove"
-                        style={removeButtonStyle}
-                        onClick={ this.props.onClickRemove }>
-                            x
-                    </span>)
-                }
             </div>
         );
     }
 }
 VehicleItem.propTypes = {
     // item requires id, static, and text
-    item: PropTypes.object.isRequired,
-    onClickRemove: PropTypes.func.isRequired,
+    vehicle: PropTypes.object.isRequired,
     onChangeText: PropTypes.func.isRequired,
 };
 
 
 class PersonItem extends React.Component {
+    handleChangeName(keyval) {
+        this.props.onChangeText(keyval[this.props.person.id])
+    }
     render() {
-        let removeStyle = (
-            this.props.item.static === true
-        ) ? {border: '0px'} : {};
-        let removeButtonStyle = {
-            position: 'absolute',
-            right: '2px',
-            top: 0,
-            cursor: 'pointer'
-        };
         return (
-            <div style={ removeStyle }>
+            <div>
                 <div>
                     <RIEInput className="text"
-                        value={ this.props.item.text }
-                        change={ this.props.onChangeText }
-                        propName={ this.props.item.id }
+                        value={ this.props.person.name }
+                        change={ this.handleChangeName.bind(this) }
+                        propName={ this.props.person.id }
                     />
                 </div>
-                <RIETags
-                    value={ new Set(['demo']) }
-                    change={ function(){} }
-                    propName='title'
-                    className='tags'
-                />
+                <div>
+                    <RIETags
+                        value={ new Set(['demo']) }
+                        change={ function(){} }
+                        propName='title'
+                        className='tags'
+                    />
+                </div>
                 {
-                    (this.props.item.static === true) ?
+                    (this.props.person.static === true) ?
                     (null) :
                     (<span className="remove"
-                        style={removeButtonStyle}
                         onClick={ this.props.onClickRemove }>
-                            x
+                            X
                     </span>)
                 }
             </div>
@@ -387,22 +421,22 @@ class PersonItem extends React.Component {
 }
 PersonItem.propTypes = {
     // item requires id, static, and text
-    item: PropTypes.object.isRequired,
+    person: PropTypes.object.isRequired,
     onClickRemove: PropTypes.func.isRequired,
     onChangeText: PropTypes.func.isRequired,
 };
 
-function inf_to_str(item) {
-    return Object.assign(item, (
-        (item.y===Infinity) ? {y:"$inf"} : {}
-    ));
-}
-
-function str_to_inf(item) {
-    return Object.assign(item, (
-        (item.y==="$inf") ? {y:Infinity} : {}
-    ));
-}
+// function inf_to_str(item) {
+//     return Object.assign(item, (
+//         (item.y===Infinity) ? {y:"$inf"} : {}
+//     ));
+// }
+//
+// function str_to_inf(item) {
+//     return Object.assign(item, (
+//         (item.y==="$inf") ? {y:Infinity} : {}
+//     ));
+// }
 
 function getHashState() {
     return window.location.hash.replace('#', '');
@@ -432,7 +466,7 @@ function getFromLS() {
     let ls = null;
     if (window.sessionStorage) {
         try {
-            ls = window.localStorage.getItem(APP_NAME);
+            ls = window.sessionStorage.getItem(APP_NAME);
         }
         catch(e) {}
     }
@@ -441,8 +475,10 @@ function getFromLS() {
 
 function saveToLS(json) {
     if (window.sessionStorage) {
-        window.localStorage.removeItem(APP_NAME);
-        window.sessionStorage.setItem(APP_NAME, json);
+        window.sessionStorage.removeItem(APP_NAME);
+        if (json.length === 0) {
+            window.sessionStorage.setItem(APP_NAME, json);
+        }
     }
 }
 
