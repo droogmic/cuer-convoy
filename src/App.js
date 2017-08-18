@@ -75,6 +75,7 @@ class App extends Component {
                 return {
                     name: save_vehicle.n || default_vehicle_names[idx],
                     people: save_vehicle.p || [],
+                    tags: save_vehicle.t || new Set(),
                 };
             }
         )
@@ -91,6 +92,9 @@ class App extends Component {
                 let save_vehicle = {
                     p: vehicle.people,
                 };
+                if (vehicle.tags!==undefined && vehicle.tags.length !== 0) {
+                    save_vehicle.t = vehicle.tags
+                }
                 if (vehicle.name !== default_vehicle_names[idx]) {
                     save_vehicle.n = vehicle.name
                 }
@@ -98,9 +102,14 @@ class App extends Component {
             }
         );
         let json_str = JSON.stringify(save_obj);
-        if (save_obj.every(
-            vehicle => vehicle.p.length===0&&vehicle.n===undefined
-        )) {
+        let null_vehicle = function(vehicle) {
+            return (
+                vehicle.n===undefined &&
+                vehicle.p.length===0 &&
+                vehicle.t!==undefined
+            );
+        }
+        if (save_obj.every(null_vehicle)) {
             json_str = "";
         }
         if (HASH) setToHash(json_str);
@@ -115,6 +124,7 @@ class App extends Component {
         return {
             id: this.getVehicleId(vehicle.name, vehicle_idx),
             name: vehicle.name,
+            tags: vehicle.tags || new Set(),
             x: vehicle_idx, y: 0,
             static: true,
         };
@@ -127,6 +137,7 @@ class App extends Component {
                 person.name, person_idx
             ),
             name: person.name,
+            tags: person.tags || new Set(),
             x: vehicle_idx, y: person_idx,
             vehicle_idx: vehicle_idx,
         };
@@ -164,10 +175,21 @@ class App extends Component {
         this.saveState();
     }
 
+    handleRetagVehicle(vehicle_idx, val) {
+        this.setState(prevState => {
+            prevState.vehicles[vehicle_idx].tags = val;
+            return {
+                vehicles: prevState.vehicles
+            }
+        });
+        this.saveState();
+    }
+
     handleAddPerson(val) {
         this.setState(prevState => {
             prevState.vehicles[0].people.push({
                 name: val,
+                tags: new Set(),
             });
             return {
                 vehicles: prevState.vehicles
@@ -261,6 +283,9 @@ class App extends Component {
             let handleTextChange = function(val) {
                 this.handleRenameVehicle(vehicle_idx, val)
             };
+            let handleTagChange = function(val) {
+                this.handleRetagVehicle(vehicle_idx, val)
+            };
             return (
                 <div key={ vehicle.id }>
                     <VehicleItem
@@ -268,14 +293,24 @@ class App extends Component {
                         onChangeText={
                             handleTextChange.bind(this)
                         }
+                        onChangeTags={
+                            handleTagChange.bind(this)
+                        }
                     />
                 </div>
             );
         };
-        let createPersonElement = function(person, person_idx) {
+        let createPersonElement = (function(person, person_idx) {
             let handleTextChange = function(val) {
                 this.handleEditPerson(person.vehicle_idx, person_idx, {
                     name: val,
+                    tags: person.tags,
+                })
+            };
+            let handleTagChange = function(val) {
+                this.handleEditPerson(person.vehicle_idx, person_idx, {
+                    name: person.name,
+                    tags: val,
                 })
             };
             return (
@@ -290,15 +325,50 @@ class App extends Component {
                         onChangeText={
                             handleTextChange.bind(this)
                         }
+                        onChangeTags={
+                            handleTagChange.bind(this)
+                        }
                     />
                 </div>
             );
-        };
+        }).bind(this);
         let vehicle_elements = this.state.vehicles
             .map(this.toVehicleItem.bind(this))
             .map(createVehicleElement.bind(this));
-        let people_elements = this.getPeopleItems(this.state.vehicles)
-            .map(createPersonElement.bind(this));
+        let push_func = function(acc, vehicle, vehicle_idx, person, person_idx) {
+            acc.push(
+                createPersonElement(this.toPersonItem(
+                    vehicle, vehicle_idx,
+                    person, person_idx
+                ), person_idx)
+            );
+        };
+        let concat_vehicle_people = function(acc, vehicle, vehicle_idx) {
+            vehicle.people.forEach(
+                push_func.bind(this, acc, vehicle, vehicle_idx)
+            );
+            return acc;
+        };
+        let people_elements = this.state.vehicles.reduce(
+            concat_vehicle_people.bind(this),
+            []
+        );
+        // let people_elements = this.state.vehicles.reduce(
+        //     function(acc, vehicle, vehicle_idx) {
+        //         vehicle.people.forEach(
+        //             function(acc, vehicle, vehicle_idx, person, person_idx) {
+        //                 acc.push(
+        //                     createPersonElement(this.toPersonItem(
+        //                         vehicle, vehicle_idx,
+        //                         person, person_idx
+        //                     ), person_idx)
+        //                 );
+        //             }
+        //         );
+        //         return acc;
+        //     },
+        //     []
+        // );
         let elements = vehicle_elements.concat(people_elements);
         return elements;
     }
@@ -311,6 +381,7 @@ class App extends Component {
                 <Input
                     onAdd={ this.handleAddPerson.bind(this) }
                     onClear={ this.handleClearPeople.bind(this) }
+                    state={ this.state }
                 />
                 <AutoReactGridLayout
                     cols={ VEHICLE_COUNT+1 }
@@ -339,6 +410,11 @@ class Input extends React.Component {
         this.refs.name.value = "";
     }
 
+    _handleJsonPress = () => {
+        console.log(this.props.state);
+        console.log(JSON.stringify(this.props.state, null, 2));
+    }
+
     render() {
         return (
             <div>
@@ -349,7 +425,12 @@ class Input extends React.Component {
                 <button onClick={ this._handleButtonPress }>
                     Add Person (Enter)
                 </button>
-                <button onClick={ this.props.onClear }>Clear</button>
+                <button onClick={ this.props.onClear }>
+                    Clear
+                </button>
+                <button onClick={ this._handleJsonPress }>
+                    JSON
+                </button>
             </div>
         )
     }
@@ -357,12 +438,16 @@ class Input extends React.Component {
 Input.propTypes = {
     onAdd: PropTypes.func.isRequired,
     onClear: PropTypes.func.isRequired,
+    state: PropTypes.object
 };
 
 
 class VehicleItem extends React.Component {
     handleChangeName(keyval) {
         this.props.onChangeText(keyval[this.props.vehicle.id])
+    }
+    handleChangeTags(keyval) {
+        this.props.onChangeTags(keyval[this.props.vehicle.id])
     }
     render() {
         return (
@@ -374,20 +459,30 @@ class VehicleItem extends React.Component {
                         propName={ this.props.vehicle.id }
                     />
                 </div>
+                <div>
+                    <RIETags className='tags'
+                        value={ this.props.vehicle.tags }
+                        change={ this.handleChangeTags.bind(this) }
+                        propName={ this.props.vehicle.id }
+                    />
+                </div>
             </div>
         );
     }
 }
 VehicleItem.propTypes = {
-    // item requires id, static, and text
     vehicle: PropTypes.object.isRequired,
     onChangeText: PropTypes.func.isRequired,
+    onChangeTags: PropTypes.func.isRequired,
 };
 
 
 class PersonItem extends React.Component {
     handleChangeName(keyval) {
         this.props.onChangeText(keyval[this.props.person.id])
+    }
+    handleChangeTags(keyval) {
+        this.props.onChangeTags(keyval[this.props.person.id])
     }
     render() {
         return (
@@ -400,11 +495,10 @@ class PersonItem extends React.Component {
                     />
                 </div>
                 <div>
-                    <RIETags
-                        value={ new Set(['demo']) }
-                        change={ function(){} }
-                        propName='title'
-                        className='tags'
+                    <RIETags className='tags'
+                        value={ this.props.person.tags }
+                        change={ this.handleChangeTags.bind(this) }
+                        propName={ this.props.person.id }
                     />
                 </div>
                 {
@@ -424,6 +518,7 @@ PersonItem.propTypes = {
     person: PropTypes.object.isRequired,
     onClickRemove: PropTypes.func.isRequired,
     onChangeText: PropTypes.func.isRequired,
+    onChangeTags: PropTypes.func.isRequired,
 };
 
 // function inf_to_str(item) {
