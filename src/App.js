@@ -1,9 +1,11 @@
-import React, { Component } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
-import './App.css';
-// import {Responsive, WidthProvider} from 'react-grid-layout';
 import ReactGridLayout, { WidthProvider } from 'react-grid-layout';
-import { RIEInput, RIETags } from 'riek';
+
+import Input from './Header';
+import { VehicleItem, PersonItem } from './Items';
+
+import './App.css';
 
 const AutoReactGridLayout = WidthProvider(ReactGridLayout);
 
@@ -13,7 +15,7 @@ const LS = false;
 const HASH = true;
 
 
-class App extends Component {
+class App extends React.Component {
     constructor(props) {
         super(props);
         this.state = this.getInitialState();
@@ -59,6 +61,21 @@ class App extends Component {
         return this.getSavedState();
     }
 
+    augmentPerson(person, idx) {
+        return {
+           name: person.n,
+           tags: person.t,
+        }
+    }
+
+    augmentVehicle(default_vehicle_names, save_vehicle, idx) {
+        return {
+            name: save_vehicle.n || default_vehicle_names[idx],
+            people: save_vehicle.p.map(this.augmentPerson) || [],
+            tags: save_vehicle.t || new Set(),
+        };
+    }
+
     getSavedState() {
         let json_str = (
             (HASH && getFromHash()) ||
@@ -71,36 +88,43 @@ class App extends Component {
         }
         let default_vehicle_names = this.defaultVehicleNames()
         let new_vehicles = save_obj.map(
-            function(save_vehicle, idx) {
-                return {
-                    name: save_vehicle.n || default_vehicle_names[idx],
-                    people: save_vehicle.p || [],
-                    tags: save_vehicle.t || new Set(),
-                };
-            }
-        )
+            this.augmentVehicle.bind(this, default_vehicle_names)
+        );
         return {
             vehicles: new_vehicles,
         };
     }
 
+    reducePerson(person, idx) {
+        return {
+            n: person.name,
+            t: person.tags,
+        }
+    }
+
+    reduceVehicle(default_vehicle_names, vehicle, idx) {
+        let save_vehicle = {
+            p: vehicle.people.map(this.reducePerson)
+        };
+        if (vehicle.tags!==undefined && vehicle.tags.length !== 0) {
+            save_vehicle.t = vehicle.tags
+        }
+        if (vehicle.name !== default_vehicle_names[idx]) {
+            save_vehicle.n = vehicle.name
+        }
+        return save_vehicle;
+    }
+
+    getSaveObj() {
+      let default_vehicle_names = this.defaultVehicleNames()
+      let save_obj = this.state.vehicles.map(
+          this.reduceVehicle.bind(this, default_vehicle_names)
+      );
+      return save_obj;
+    }
+
     saveState() {
-        let save_obj = this.state.vehicles;
-        let default_vehicle_names = this.defaultVehicleNames()
-        save_obj = save_obj.map(
-            function(vehicle, idx) {
-                let save_vehicle = {
-                    p: vehicle.people,
-                };
-                if (vehicle.tags!==undefined && vehicle.tags.length !== 0) {
-                    save_vehicle.t = vehicle.tags
-                }
-                if (vehicle.name !== default_vehicle_names[idx]) {
-                    save_vehicle.n = vehicle.name
-                }
-                return save_vehicle;
-            }
-        );
+        let save_obj = this.getSaveObj();
         let json_str = JSON.stringify(save_obj);
         let null_vehicle = function(vehicle) {
             return (
@@ -225,29 +249,36 @@ class App extends Component {
     }
 
     handleLayoutChange(layout) {
+        let createVehicle = function(all_people, vehicle, vehicle_idx) {
+            let new_people = all_people
+                .filter(person => layout.find(
+                    grid_item => grid_item.i===person.id
+                ).x===vehicle_idx)
+                .sort(function(person_a, person_b) {
+                    return (
+                        layout.find(
+                            grid_item => grid_item.i===person_a.id
+                        ).y -
+                        layout.find(
+                            grid_item => grid_item.i===person_b.id
+                        ).y
+                    );
+                })
+                .map(function(person, person_idx) {
+                    return {
+                       name: person.name,
+                       tags: person.tags,
+                   };
+                });
+            return {
+                name: vehicle.name,
+                people: new_people,
+            };
+        }
         this.setState(prevState => {
             let all_people = this.getPeopleItems(prevState.vehicles);
             let new_vehicles = prevState.vehicles.map(
-                function(vehicle, vehicle_idx) {
-                    let new_people = all_people
-                        .filter(person => layout.find(
-                            grid_item => grid_item.i===person.id
-                        ).x===vehicle_idx)
-                        .sort(function(person_a, person_b) {
-                            return (
-                                layout.find(
-                                    grid_item => grid_item.i===person_a.id
-                                ).y -
-                                layout.find(
-                                    grid_item => grid_item.i===person_b.id
-                                ).y
-                            );
-                        });
-                    return {
-                        name: vehicle.name,
-                        people: new_people,
-                    };
-                }
+                createVehicle.bind(null, all_people)
             );
             return {
                 vehicles: new_vehicles
@@ -353,22 +384,6 @@ class App extends Component {
             concat_vehicle_people.bind(this),
             []
         );
-        // let people_elements = this.state.vehicles.reduce(
-        //     function(acc, vehicle, vehicle_idx) {
-        //         vehicle.people.forEach(
-        //             function(acc, vehicle, vehicle_idx, person, person_idx) {
-        //                 acc.push(
-        //                     createPersonElement(this.toPersonItem(
-        //                         vehicle, vehicle_idx,
-        //                         person, person_idx
-        //                     ), person_idx)
-        //                 );
-        //             }
-        //         );
-        //         return acc;
-        //     },
-        //     []
-        // );
         let elements = vehicle_elements.concat(people_elements);
         return elements;
     }
@@ -395,131 +410,6 @@ class App extends Component {
         );
     }
 }
-
-
-class Input extends React.Component {
-    _handleKeyPress = (e) => {
-        if (e.key === 'Enter') {
-            this.props.onAdd(e.target.value);
-            e.target.value = "";
-        }
-    }
-
-    _handleButtonPress = () => {
-        this.props.onAdd(this.refs.name.value);
-        this.refs.name.value = "";
-    }
-
-    _handleJsonPress = () => {
-        console.log(this.props.state);
-        console.log(JSON.stringify(this.props.state, null, 2));
-    }
-
-    render() {
-        return (
-            <div>
-                <input
-                    ref='name'
-                    type="text"
-                    onKeyPress={this._handleKeyPress}/>
-                <button onClick={ this._handleButtonPress }>
-                    Add Person (Enter)
-                </button>
-                <button onClick={ this.props.onClear }>
-                    Clear
-                </button>
-                <button onClick={ this._handleJsonPress }>
-                    JSON
-                </button>
-            </div>
-        )
-    }
-}
-Input.propTypes = {
-    onAdd: PropTypes.func.isRequired,
-    onClear: PropTypes.func.isRequired,
-    state: PropTypes.object
-};
-
-
-class VehicleItem extends React.Component {
-    handleChangeName(keyval) {
-        this.props.onChangeText(keyval[this.props.vehicle.id])
-    }
-    handleChangeTags(keyval) {
-        this.props.onChangeTags(keyval[this.props.vehicle.id])
-    }
-    render() {
-        return (
-            <div>
-                <div>
-                    <RIEInput className="text"
-                        value={ this.props.vehicle.name }
-                        change={ this.handleChangeName.bind(this) }
-                        propName={ this.props.vehicle.id }
-                    />
-                </div>
-                <div>
-                    <RIETags className='tags'
-                        value={ this.props.vehicle.tags }
-                        change={ this.handleChangeTags.bind(this) }
-                        propName={ this.props.vehicle.id }
-                    />
-                </div>
-            </div>
-        );
-    }
-}
-VehicleItem.propTypes = {
-    vehicle: PropTypes.object.isRequired,
-    onChangeText: PropTypes.func.isRequired,
-    onChangeTags: PropTypes.func.isRequired,
-};
-
-
-class PersonItem extends React.Component {
-    handleChangeName(keyval) {
-        this.props.onChangeText(keyval[this.props.person.id])
-    }
-    handleChangeTags(keyval) {
-        this.props.onChangeTags(keyval[this.props.person.id])
-    }
-    render() {
-        return (
-            <div>
-                <div>
-                    <RIEInput className="text"
-                        value={ this.props.person.name }
-                        change={ this.handleChangeName.bind(this) }
-                        propName={ this.props.person.id }
-                    />
-                </div>
-                <div>
-                    <RIETags className='tags'
-                        value={ this.props.person.tags }
-                        change={ this.handleChangeTags.bind(this) }
-                        propName={ this.props.person.id }
-                    />
-                </div>
-                {
-                    (this.props.person.static === true) ?
-                    (null) :
-                    (<span className="remove"
-                        onClick={ this.props.onClickRemove }>
-                            X
-                    </span>)
-                }
-            </div>
-        );
-    }
-}
-PersonItem.propTypes = {
-    // item requires id, static, and text
-    person: PropTypes.object.isRequired,
-    onClickRemove: PropTypes.func.isRequired,
-    onChangeText: PropTypes.func.isRequired,
-    onChangeTags: PropTypes.func.isRequired,
-};
 
 // function inf_to_str(item) {
 //     return Object.assign(item, (

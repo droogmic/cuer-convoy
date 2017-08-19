@@ -10,6 +10,7 @@
     "riek": "^1.1.0"
   },
   "devDependencies": {
+    "gh-pages": "^1.0.0",
     "prop-types": "^15.5.10",
     "react-scripts": "0.9.5"
   },
