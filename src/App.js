@@ -61,22 +61,20 @@ class App extends React.Component {
         return this.getSavedState();
     }
 
-    augmentPerson(person, idx) {
-        return {
-           name: person.n,
-           tags: person.t,
-        }
-    }
-
-    augmentVehicle(default_vehicle_names, save_vehicle, idx) {
-        return {
-            name: save_vehicle.n || default_vehicle_names[idx],
-            people: save_vehicle.p.map(this.augmentPerson) || [],
-            tags: save_vehicle.t || new Set(),
-        };
-    }
-
     getSavedState() {
+        let augmentPerson = function(person, idx) {
+            return {
+               name: person.n,
+               tags: new Set(person.t),
+            }
+        }
+        let augmentVehicle = function(default_vehicle_names, save_vehicle, idx) {
+            return {
+                name: save_vehicle.n || default_vehicle_names[idx],
+                people: save_vehicle.p.map(augmentPerson) || [],
+                tags: new Set(save_vehicle.t || []),
+            };
+        }
         let json_str = (
             (HASH && getFromHash()) ||
             (LS && getFromLS()) ||
@@ -88,39 +86,37 @@ class App extends React.Component {
         }
         let default_vehicle_names = this.defaultVehicleNames()
         let new_vehicles = save_obj.map(
-            this.augmentVehicle.bind(this, default_vehicle_names)
+            augmentVehicle.bind(this, default_vehicle_names)
         );
         return {
             vehicles: new_vehicles,
         };
     }
 
-    reducePerson(person, idx) {
-        return {
-            n: person.name,
-            t: person.tags,
-        }
-    }
-
-    reduceVehicle(default_vehicle_names, vehicle, idx) {
-        let save_vehicle = {
-            p: vehicle.people.map(this.reducePerson)
-        };
-        if (vehicle.tags!==undefined && vehicle.tags.length !== 0) {
-            save_vehicle.t = vehicle.tags
-        }
-        if (vehicle.name !== default_vehicle_names[idx]) {
-            save_vehicle.n = vehicle.name
-        }
-        return save_vehicle;
-    }
-
     getSaveObj() {
-      let default_vehicle_names = this.defaultVehicleNames()
-      let save_obj = this.state.vehicles.map(
-          this.reduceVehicle.bind(this, default_vehicle_names)
-      );
-      return save_obj;
+        let reducePerson = function(person, idx) {
+            return {
+                n: person.name,
+                t: [...person.tags],
+            }
+        }
+        let reduceVehicle = function(default_vehicle_names, vehicle, idx) {
+            let save_vehicle = {
+                p: vehicle.people.map(reducePerson)
+            };
+            if (vehicle.tags!==undefined && vehicle.tags.length!==0) {
+                save_vehicle.t = [...vehicle.tags]
+            }
+            if (vehicle.name !== default_vehicle_names[idx]) {
+                save_vehicle.n = vehicle.name
+            }
+            return save_vehicle;
+        }
+        let default_vehicle_names = this.defaultVehicleNames()
+        let save_obj = this.state.vehicles.map(
+            reduceVehicle.bind(this, default_vehicle_names)
+        );
+        return save_obj;
     }
 
     saveState() {
@@ -200,6 +196,7 @@ class App extends React.Component {
     }
 
     handleRetagVehicle(vehicle_idx, val) {
+        // console.log("handleRetagVehicle", vehicle_idx, val);
         this.setState(prevState => {
             prevState.vehicles[vehicle_idx].tags = val;
             return {
@@ -207,6 +204,7 @@ class App extends React.Component {
             }
         });
         this.saveState();
+        // console.log("this.state", JSON.stringify(this.state, null, 2));
     }
 
     handleAddPerson(val) {
@@ -244,8 +242,9 @@ class App extends React.Component {
 
     handleClearPeople() {
         this.setState(this.getDefaultState());
-        if (HASH) setToHash("");
-        if (LS) saveToLS("");
+        this.saveState();
+        // if (HASH) setToHash("");
+        // if (LS) saveToLS("");
     }
 
     handleLayoutChange(layout) {
@@ -272,6 +271,7 @@ class App extends React.Component {
                 });
             return {
                 name: vehicle.name,
+                tags: vehicle.tags,
                 people: new_people,
             };
         }
@@ -396,7 +396,7 @@ class App extends React.Component {
                 <Input
                     onAdd={ this.handleAddPerson.bind(this) }
                     onClear={ this.handleClearPeople.bind(this) }
-                    state={ this.state }
+                    state={ this.getSaveObj() }
                 />
                 <AutoReactGridLayout
                     cols={ VEHICLE_COUNT+1 }
